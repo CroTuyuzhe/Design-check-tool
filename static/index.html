@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设计走查工具 - 全维度走查</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f7fa;color:#333}
+.header{background:#fff;padding:16px 24px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;align-items:center;gap:12px}
+.header h1{font-size:20px;font-weight:600}
+.header .badge{background:#2196F3;color:#fff;padding:2px 8px;border-radius:10px;font-size:12px}
+.upload-section{max-width:900px;margin:40px auto;padding:0 24px}
+.upload-section h2{text-align:center;margin-bottom:24px;font-size:18px;color:#555}
+.upload-row{display:flex;gap:24px;justify-content:center;flex-wrap:wrap}
+.drop-zone{flex:1;max-width:380px;min-height:260px;border:2px dashed #ccc;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;background:#fff;position:relative;overflow:hidden}
+.drop-zone:hover,.drop-zone.drag-over{border-color:#2196F3;background:#e3f2fd}
+.drop-zone .icon{font-size:48px;margin-bottom:12px;opacity:.5}
+.drop-zone .label{font-size:14px;color:#888}
+.drop-zone .sublabel{font-size:12px;color:#aaa;margin-top:4px}
+.drop-zone input[type=file]{display:none}
+.drop-zone .preview{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#fff}
+.drop-zone .preview img{max-width:100%;max-height:100%;object-fit:contain}
+.drop-zone .preview .name{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:12px;color:#666;background:rgba(255,255,255,.9);padding:4px}
+.analyze-btn{display:block;margin:32px auto 0;padding:12px 48px;font-size:16px;background:#2196F3;color:#fff;border:none;border-radius:8px;cursor:pointer;transition:background .2s}
+.analyze-btn:hover{background:#1976D2}
+.analyze-btn:disabled{background:#ccc;cursor:not-allowed}
+.analyze-btn.loading{background:#90CAF9;pointer-events:none}
+.results-section{display:none;max-width:1400px;margin:24px auto;padding:0 24px}
+.results-section.active{display:block}
+.summary-bar{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.summary-card{background:#fff;border-radius:10px;padding:16px 24px;flex:1;min-width:140px;box-shadow:0 1px 3px rgba(0,0,0,.06);text-align:center}
+.summary-card .value{font-size:28px;font-weight:700}
+.summary-card .label{font-size:12px;color:#888;margin-top:4px}
+.verdict-pass{color:#4CAF50}
+.verdict-fail{color:#f44336}
+.main-layout{display:flex;gap:20px;min-height:600px}
+.canvas-area{flex:1;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;display:flex;flex-direction:column}
+.side-panel{width:380px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;flex-direction:column;max-height:700px}
+.tab-bar{display:flex;border-bottom:1px solid #eee;padding:0 12px}
+.tab-bar .tab{padding:10px 16px;cursor:pointer;font-size:13px;color:#888;border-bottom:2px solid transparent;transition:all .2s}
+.tab-bar .tab:hover{color:#333}
+.tab-bar .tab.active{color:#2196F3;border-bottom-color:#2196F3}
+.canvas-container{flex:1;position:relative;background:#e8e8e8;overflow:hidden;cursor:grab}
+.canvas-container canvas{position:absolute;top:0;left:0}
+.canvas-hint{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;padding:4px 12px;border-radius:12px;font-size:11px;pointer-events:none}
+.zoom-controls{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:4px}
+.zoom-controls button{width:32px;height:32px;border:none;background:rgba(255,255,255,.9);border-radius:6px;cursor:pointer;font-size:16px;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.zoom-controls button:hover{background:#fff}
+.panel-header{padding:12px 16px;border-bottom:1px solid #eee;font-size:14px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.module-list{flex:1;overflow-y:auto;padding:8px}
+.module-card{border:1px solid #eee;border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:pointer;transition:all .15s}
+.module-card:hover{border-color:#2196F3;box-shadow:0 2px 6px rgba(33,150,243,.15)}
+.module-card.selected{border-color:#2196F3;background:#e3f2fd}
+.module-card .head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.module-card .num{width:24px;height:24px;border-radius:50%;background:#2196F3;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.module-card .num.critical{background:#f44336}
+.module-card .num.major{background:#ff9800}
+.module-card .num.minor{background:#ffc107;color:#333}
+.module-card .num.ok{background:#4CAF50}
+.module-card .offset-detail{font-size:13px;color:#333;line-height:1.6;margin:4px 0}
+.module-card .offset-detail .dp{font-weight:700;color:#2196F3}
+.module-card .actions{display:flex;gap:6px;margin-top:8px}
+.module-card .actions button{padding:3px 10px;font-size:11px;border:1px solid #ddd;background:#fff;border-radius:4px;cursor:pointer}
+.module-card .actions .locate-btn:hover{border-color:#2196F3;color:#2196F3}
+.module-card .actions .delete-btn:hover{border-color:#f44336;color:#f44336}
+/* Top offsets section */
+.top-offsets{background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:20px}
+.top-offsets h3{font-size:14px;margin-bottom:12px;color:#333}
+.top-offset-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0}
+.top-offset-item:last-child{border-bottom:none}
+.top-offset-item .id-badge{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.top-offset-item .id-badge.critical{background:#f44336;color:#fff}
+.top-offset-item .id-badge.major{background:#ff9800;color:#fff}
+.top-offset-item .id-badge.minor{background:#ffc107;color:#333}
+.top-offset-item .desc{font-size:13px;flex:1}
+.top-offset-item .dp-val{font-size:14px;font-weight:700;color:#2196F3;white-space:nowrap}
+.panel-footer{border-top:1px solid #eee;padding:12px 16px}
+.panel-footer .verdict-text{font-size:14px;font-weight:600;margin-bottom:8px}
+.panel-footer .summary-text{font-size:12px;color:#666;margin-bottom:12px}
+.export-btn{width:100%;padding:10px;background:#2196F3;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}
+.export-btn:hover{background:#1976D2}
+.empty-state{text-align:center;padding:40px 20px;color:#aaa}
+.empty-state .icon{font-size:36px;margin-bottom:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+@media(max-width:900px){.main-layout{flex-direction:column}.side-panel{width:100%;max-height:400px}}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📐 设计走查工具</h1>
+  <span class="badge">全维度走查</span>
+</div>
+
+<div class="upload-section" id="uploadSection">
+  <h2>上传设计稿与实现截图，检测元素位置偏移 (dp)</h2>
+  <div class="upload-row">
+    <div class="drop-zone" id="dropDesign" onclick="document.getElementById('fileDesign').click()">
+      <div class="icon">📐</div>
+      <div class="label">设计稿 (标准)</div>
+      <div class="sublabel">点击或拖拽上传</div>
+      <input type="file" id="fileDesign" accept="image/*">
+      <div class="preview" style="display:none"><img id="previewDesign"><div class="name" id="nameDesign"></div></div>
+    </div>
+    <div class="drop-zone" id="dropScreenshot" onclick="document.getElementById('fileScreenshot').click()">
+      <div class="icon">📱</div>
+      <div class="label">研发实现截图</div>
+      <div class="sublabel">点击或拖拽上传</div>
+      <input type="file" id="fileScreenshot" accept="image/*">
+      <div class="preview" style="display:none"><img id="previewScreenshot"><div class="name" id="nameScreenshot"></div></div>
+    </div>
+  </div>
+  <div style="text-align:center;margin-top:16px;">
+    <label style="font-size:13px;color:#888;">灵敏度: </label>
+    <input type="range" id="sensitivity" min="5" max="80" value="30" style="vertical-align:middle;">
+    <span id="sensValue" style="font-size:13px;color:#666;">30</span>
+  </div>
+  <button class="analyze-btn" id="analyzeBtn" disabled onclick="uploadAndAnalyze()">开始分析</button>
+</div>
+
+<div class="results-section" id="resultsSection">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div class="summary-bar" id="summaryBar" style="flex:1;margin-bottom:0;"></div>
+    <button onclick="resetAll()" style="margin-left:16px;padding:8px 20px;font-size:13px;border:1px solid #2196F3;color:#2196F3;background:#fff;border-radius:6px;cursor:pointer;white-space:nowrap;">🔄 重新上传</button>
+  </div>
+
+  <!-- Top 5 偏移速览 -->
+  <div class="top-offsets" id="topOffsets" style="display:none">
+    <h3>🎯 最大偏移 Top 5</h3>
+    <div id="topOffsetsList"></div>
+  </div>
+
+  <div class="main-layout">
+    <div class="canvas-area">
+      <div class="tab-bar" id="tabBar"></div>
+      <div class="canvas-container" id="canvasContainer">
+        <canvas id="mainCanvas"></canvas>
+        <div class="canvas-hint" id="canvasHint">滚轮缩放 · 拖拽平移</div>
+        <div class="zoom-controls">
+          <button onclick="viewer.zoomIn()" title="放大">+</button>
+          <button onclick="viewer.zoomOut()" title="缩小">−</button>
+          <button onclick="viewer.resetView()" title="重置">⟲</button>
+        </div>
+      </div>
+    </div>
+    <div class="side-panel">
+      <div class="panel-header"><span>偏移详情</span><button id="addAnnotationBtn" onclick="toggleAnnotationMode()" style="padding:6px 12px;font-size:12px;border:1px solid #2196F3;color:#2196F3;background:#fff;border-radius:6px;cursor:pointer;">✏️ 添加标注</button></div>
+      <div class="module-list" id="moduleList">
+        <div class="empty-state"><div class="icon">🔍</div>分析完成后显示偏移详情</div>
+      </div>
+      <div class="panel-footer" id="panelFooter" style="display:none">
+        <div class="verdict-text" id="verdictText"></div>
+        <div class="summary-text" id="summaryText"></div>
+        <button class="export-btn" onclick="exportReport()">📥 导出标注报告</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center;padding:24px;font-size:12px;color:#bbb;">制作人：Eric</div>
+
+<script>
+let designFile=null,screenshotFile=null;
+let analysisData=null;
+let currentTab='annotated';
+let annotationMode=false;
+let drawStart=null;
+const images={};
+
+class Viewer{
+  constructor(container,canvas){
+    this.container=container;this.canvas=canvas;
+    this.ctx=canvas.getContext('2d');
+    this.img=null;this.zoom=1;this.panX=0;this.panY=0;
+    this.dragging=false;this.lastMouse={x:0,y:0};
+    this.annotations=[];this.selectedAnnotation=null;
+    this._bindEvents();
+  }
+  _bindEvents(){
+    const c=this.container;
+    c.addEventListener('wheel',e=>{
+      e.preventDefault();
+      const rect=this.canvas.getBoundingClientRect();
+      const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+      const old=this.zoom;
+      this.zoom=Math.max(.1,Math.min(5,this.zoom*(e.deltaY>0?.9:1.1)));
+      this.panX=mx-(mx-this.panX)*(this.zoom/old);
+      this.panY=my-(my-this.panY)*(this.zoom/old);
+      this.draw();
+    },{passive:false});
+    c.addEventListener('mousedown',e=>{
+      if(annotationMode&&e.button===0){
+        const pos=this._canvasToImage(e);
+        if(pos){drawStart=pos;this.dragging=false}
+        return;
+      }
+      this.dragging=true;this.lastMouse={x:e.clientX,y:e.clientY}
+    });
+    c.addEventListener('mousemove',e=>{
+      if(annotationMode&&drawStart){
+        this.draw();
+        const pos=this._canvasToImage(e);
+        if(pos){
+          const sx=drawStart.x*this.zoom+this.panX,sy=drawStart.y*this.zoom+this.panY;
+          const ex=pos.x*this.zoom+this.panX,ey=pos.y*this.zoom+this.panY;
+          this.ctx.strokeStyle='#2196F3';this.ctx.lineWidth=2;
+          this.ctx.setLineDash([6,3]);
+          this.ctx.strokeRect(sx,sy,ex-sx,ey-sy);
+          this.ctx.setLineDash([]);
+        }
+        return;
+      }
+      if(!this.dragging)return;
+      this.panX+=e.clientX-this.lastMouse.x;this.panY+=e.clientY-this.lastMouse.y;
+      this.lastMouse={x:e.clientX,y:e.clientY};this.draw();
+    });
+    c.addEventListener('mouseup',e=>{
+      if(annotationMode&&drawStart){
+        const pos=this._canvasToImage(e);
+        if(pos){
+          const x1=Math.min(drawStart.x,pos.x),y1=Math.min(drawStart.y,pos.y);
+          const x2=Math.max(drawStart.x,pos.x),y2=Math.max(drawStart.y,pos.y);
+          if(x2-x1>5&&y2-y1>5){
+            const desc=prompt('请输入标注内容：');
+            if(desc!==null&&desc.trim()){
+              const nextId=Math.max(0,...analysisData.modules.map(m=>m.id||0))+1;
+              analysisData.modules.push({
+                id:nextId,type:'custom',bbox:[x1,y1,x2,y2],severity:'minor',
+                description:desc.trim(),dx_dp:null,dy_dp:null,dw_dp:null,dh_dp:null,
+                diffs:[{type:'custom',description:desc.trim()}],design_bbox:null,impl_bbox:null
+              });
+              renderModuleList();
+            }
+          }
+        }
+        drawStart=null;this.draw();return;
+      }
+      this.dragging=false;
+    });
+    c.addEventListener('mouseleave',()=>{this.dragging=false;drawStart=null});
+    c.addEventListener('click',e=>{
+      const pos=this._canvasToImage(e);if(!pos)return;
+      for(let i=this.annotations.length-1;i>=0;i--){
+        const a=this.annotations[i];const[x1,y1,x2,y2]=a.bbox;
+        if(pos.x>=x1&&pos.x<=x2&&pos.y>=y1&&pos.y<=y2){selectModule(a.id);return}
+      }
+    });
+  }
+  _canvasToImage(e){
+    if(!this.img)return null;
+    const rect=this.canvas.getBoundingClientRect();
+    const ix=(e.clientX-rect.left-this.panX)/this.zoom;
+    const iy=(e.clientY-rect.top-this.panY)/this.zoom;
+    if(ix<0||iy<0||ix>this.img.width||iy>this.img.height)return null;
+    return{x:ix,y:iy};
+  }
+  setImage(img){this.img=img;this.fitToContainer()}
+  fitToContainer(){
+    if(!this.img)return;
+    const cw=this.container.clientWidth,ch=this.container.clientHeight;
+    this.canvas.width=cw;this.canvas.height=ch;
+    const sx=cw/this.img.width,sy=ch/this.img.height;
+    this.zoom=Math.min(sx,sy)*.95;
+    this.panX=(cw-this.img.width*this.zoom)/2;
+    this.panY=(ch-this.img.height*this.zoom)/2;
+    this.draw();
+  }
+  draw(){
+    if(!this.img)return;
+    const cw=this.container.clientWidth,ch=this.container.clientHeight;
+    this.canvas.width=cw;this.canvas.height=ch;
+    this.ctx.clearRect(0,0,cw,ch);
+    this._drawCheckerboard(cw,ch);
+    this.ctx.drawImage(this.img,this.panX,this.panY,this.img.width*this.zoom,this.img.height*this.zoom);
+    this._drawAnnotations();
+  }
+  _drawCheckerboard(cw,ch){
+    const s=12;
+    for(let y=0;y<ch;y+=s)for(let x=0;x<cw;x+=s){
+      this.ctx.fillStyle=((x/s+y/s)%2===0)?'#f0f0f0':'#e0e0e0';
+      this.ctx.fillRect(x,y,s,s);
+    }
+  }
+  _drawAnnotations(){
+    const colorMap={critical:'#f44336',major:'#ff9800',minor:'#ffc107',ok:'#4CAF50'};
+    this.annotations.forEach(a=>{
+      const[x1,y1,x2,y2]=a.bbox;
+      const sx=x1*this.zoom+this.panX,sy=y1*this.zoom+this.panY;
+      const sw=(x2-x1)*this.zoom,sh=(y2-y1)*this.zoom;
+      const color=a.color||colorMap[a.severity]||'#f44336';
+      const sel=a.id===this.selectedAnnotation;
+      this.ctx.strokeStyle=color;this.ctx.lineWidth=sel?3:2;
+      this.ctx.strokeRect(sx,sy,sw,sh);
+      if(sel){this.ctx.globalAlpha=.12;this.ctx.fillStyle=color;this.ctx.fillRect(sx,sy,sw,sh);this.ctx.globalAlpha=1}
+      // Label
+      const label=`#${a.label}`;
+      this.ctx.font='bold 11px system-ui';
+      const tw=this.ctx.measureText(label).width+10;
+      this.ctx.fillStyle=color;this.ctx.fillRect(sx,sy-20,tw,18);
+      this.ctx.fillStyle='#fff';this.ctx.fillText(label,sx+5,sy-7);
+      // Offset description below box
+      if(a.desc&&a.severity!=='ok'){
+        this.ctx.font='11px system-ui';
+        let shown=a.desc;
+        const maxW=300;
+        while(this.ctx.measureText(shown).width>maxW-10&&shown.length>3)shown=shown.slice(0,-1);
+        if(shown!==a.desc)shown+='…';
+        const dw=this.ctx.measureText(shown).width+14;
+        const dy=sy+sh+4;
+        this.ctx.fillStyle='rgba(0,0,0,.8)';
+        this.ctx.fillRect(sx,dy,dw,20);
+        this.ctx.fillStyle='#fff';
+        this.ctx.fillText(shown,sx+7,dy+14);
+      }
+    });
+  }
+  zoomIn(){this.zoom=Math.min(5,this.zoom*1.2);this.draw()}
+  zoomOut(){this.zoom=Math.max(.1,this.zoom/1.2);this.draw()}
+  resetView(){this.fitToContainer()}
+  zoomTo(bbox){
+    const[x1,y1,x2,y2]=bbox;
+    const cw=this.container.clientWidth,ch=this.container.clientHeight;
+    const bw=x2-x1,bh=y2-y1,margin=80;
+    this.zoom=Math.max(.5,Math.min(4,Math.min((cw-margin*2)/bw,(ch-margin*2)/bh)));
+    this.panX=cw/2-((x1+bw/2)*this.zoom);
+    this.panY=ch/2-((y1+bh/2)*this.zoom);
+    this.draw();
+  }
+}
+
+const viewer=new Viewer(document.getElementById('canvasContainer'),document.getElementById('mainCanvas'));
+
+function setupDropZone(id,fileId,previewId,nameId,type){
+  const zone=document.getElementById(id),fi=document.getElementById(fileId);
+  ['dragenter','dragover'].forEach(e=>zone.addEventListener(e,ev=>{ev.preventDefault();zone.classList.add('drag-over')}));
+  ['dragleave','drop'].forEach(e=>zone.addEventListener(e,ev=>{ev.preventDefault();zone.classList.remove('drag-over')}));
+  zone.addEventListener('drop',e=>{if(e.dataTransfer.files.length)handleFile(e.dataTransfer.files[0],type,previewId,nameId,zone)});
+  fi.addEventListener('change',e=>{if(e.target.files.length)handleFile(e.target.files[0],type,previewId,nameId,zone)});
+}
+function handleFile(file,type,pid,nid,zone){
+  if(!file.type.startsWith('image/'))return;
+  if(type==='design')designFile=file;else screenshotFile=file;
+  const r=new FileReader();
+  r.onload=e=>{
+    document.getElementById(pid).src=e.target.result;
+    document.getElementById(nid).textContent=file.name;
+    zone.querySelector('.preview').style.display='flex';
+    zone.querySelector('.icon').style.display='none';
+    zone.querySelector('.label').style.display='none';
+    zone.querySelector('.sublabel').style.display='none';
+    document.getElementById('analyzeBtn').disabled=!(designFile&&screenshotFile);
+  };
+  r.readAsDataURL(file);
+}
+setupDropZone('dropDesign','fileDesign','previewDesign','nameDesign','design');
+setupDropZone('dropScreenshot','fileScreenshot','previewScreenshot','nameScreenshot','screenshot');
+document.getElementById('sensitivity').addEventListener('input',e=>document.getElementById('sensValue').textContent=e.target.value);
+
+async function uploadAndAnalyze(){
+  const btn=document.getElementById('analyzeBtn');
+  btn.classList.add('loading');btn.innerHTML='<span class="spinner"></span>分析中…';
+  const fd=new FormData();
+  fd.append('design',designFile);fd.append('screenshot',screenshotFile);
+  fd.append('sensitivity',document.getElementById('sensitivity').value);
+  try{
+    const resp=await fetch('/api/analyze',{method:'POST',body:fd});
+    const text=await resp.text();
+    if(!resp.ok){alert('分析失败('+resp.status+'): '+text.substring(0,200));return}
+    let data;
+    try{data=JSON.parse(text)}catch(e){alert('返回数据解析失败: '+text.substring(0,200));return}
+    analysisData=data;
+    renderResults(analysisData);
+  }catch(e){alert('请求失败: '+e.message)}
+  finally{btn.classList.remove('loading');btn.textContent='开始分析'}
+}
+
+function renderResults(data){
+  document.getElementById('uploadSection').style.display='none';
+  document.getElementById('resultsSection').classList.add('active');
+  // Load images
+  const tabs=[
+    {key:'design',label:'设计稿',b64:data.design_image},
+    {key:'screenshot',label:'实现截图',b64:data.impl_image},
+    {key:'overlay',label:'重合对比',b64:null},
+    {key:'annotated',label:'偏移标注',b64:data.annotated_image}
+  ];
+  let loaded=0;
+  tabs.forEach(t=>{
+    if(!t.b64){loaded++;if(loaded===tabs.length)switchTab('annotated');return}
+    const img=new Image();
+    img.onload=()=>{images[t.key]=img;if(++loaded===tabs.length)switchTab('annotated')};
+    img.src='data:image/png;base64,'+t.b64;
+  });
+  // Summary
+  const pass=data.verdict==='验收通过';
+  const offsetCount=data.modules.filter(m=>m.severity!=='ok').length;
+  document.getElementById('summaryBar').innerHTML=`
+    <div class="summary-card"><div class="value">${(data.ssim*100).toFixed(1)}%</div><div class="label">SSIM 相似度</div></div>
+    <div class="summary-card"><div class="value">${data.modules.length}</div><div class="label">检测元素数</div></div>
+    <div class="summary-card"><div class="value" style="color:${offsetCount?'#f44336':'#4CAF50'}">${offsetCount}</div><div class="label">有偏移元素</div></div>
+    <div class="summary-card"><div class="value ${pass?'verdict-pass':'verdict-fail'}">${data.verdict}</div><div class="label">验收结论</div></div>`;
+  // Tabs
+  document.getElementById('tabBar').innerHTML=tabs.map(t=>`<div class="tab" data-tab="${t.key}" onclick="switchTab('${t.key}')">${t.label}</div>`).join('');
+  // Top offsets
+  if(data.top_offsets&&data.top_offsets.length){
+    document.getElementById('topOffsets').style.display='block';
+    document.getElementById('topOffsetsList').innerHTML=data.top_offsets.map(o=>{
+      const typeIcons={position:'📍',size:'📐',color:'🎨','border-radius':'⬜',extra:'➕',missing:'❌'};
+      const icons=(o.diffs||[]).map(d=>typeIcons[d.type]||'').join(' ');
+      const dx=o.dx_dp||0,dy=o.dy_dp||0;
+      let parts=[];
+      if(Math.abs(dx)>=0.3)parts.push((dx>0?'右':'左')+Math.abs(dx)+'dp');
+      if(Math.abs(dy)>=0.3)parts.push((dy>0?'下':'上')+Math.abs(dy)+'dp');
+      return `<div class="top-offset-item" onclick="locateModule(${o.id})" style="cursor:pointer">
+        <div class="id-badge ${o.severity}">${o.id}</div>
+        <div class="desc">${icons} ${o.description}</div>
+        <div class="dp-val">${parts.join(' / ')||'—'}</div>
+      </div>`;
+    }).join('');
+  }else{
+    document.getElementById('topOffsets').style.display='none';
+  }
+  renderModuleList();
+  document.getElementById('panelFooter').style.display='block';
+  const ve=document.getElementById('verdictText');
+  ve.textContent=data.verdict;
+  ve.className='verdict-text '+(pass?'verdict-pass':'verdict-fail');
+  document.getElementById('summaryText').textContent=data.summary;
+}
+
+function renderModuleList(){
+  if(!analysisData)return;
+  const list=document.getElementById('moduleList');
+  if(!analysisData.modules.length){list.innerHTML='<div class="empty-state"><div class="icon">✅</div>未检测到差异</div>';return}
+  const sorted=[...analysisData.modules].sort((a,b)=>{
+    const amax=maxOff(a),bmax=maxOff(b);return bmax-amax;
+  });
+  const typeIcons={position:'📍',size:'📐',color:'🎨','border-radius':'⬜',extra:'➕',missing:'❌'};
+  const typeLabels={position:'位置',size:'尺寸',color:'颜色','border-radius':'圆角',extra:'多余',missing:'缺失'};
+  list.innerHTML=sorted.map((m,i)=>{
+    const diffs=m.diffs||[];
+    const hasDiff=m.severity!=='ok';
+    let diffHtml='';
+    if(hasDiff&&diffs.length){
+      diffHtml=diffs.map(d=>{
+        const icon=typeIcons[d.type]||'⚠️';
+        const label=typeLabels[d.type]||d.type;
+        let detail=d.description||'';
+        // 颜色补充RGB
+        if(d.type==='color'&&d.design_rgb&&d.impl_rgb){
+          detail+=` 设计rgb(${d.design_rgb})→实现rgb(${d.impl_rgb})`;
+        }
+        // 圆角补充
+        if(d.type==='border-radius'&&d.design_px!==undefined){
+          detail=`圆角: 设计${d.design_px}px → 实现${d.impl_px}px (差${d.diff_dp}dp)`;
+        }
+        return `<div style="margin:3px 0"><span style="margin-right:4px">${icon}</span><span style="font-size:12px;color:#555">${detail}</span></div>`;
+      }).join('');
+    }else{
+      diffHtml='<span style="color:#4CAF50;font-size:12px">✅ 无差异</span>';
+    }
+    return `<div class="module-card" data-id="${m.id}" onclick="selectModule(${m.id})">
+      <div class="head">
+        <div class="num ${m.severity}">${m.id}</div>
+        <span style="font-size:11px;color:#999">${diffs.map(d=>typeIcons[d.type]||'').join(' ')}</span>
+        <span style="margin-left:auto;font-size:11px;color:${m.severity==='critical'?'#f44336':m.severity==='major'?'#ff9800':'#999'}">${m.severity}</span>
+      </div>
+      <div class="offset-detail" id="desc-${m.id}">${diffHtml}</div>
+      <div class="actions">
+        <button class="locate-btn" onclick="event.stopPropagation();locateModule(${m.id})">📍 定位</button>
+        <button onclick="event.stopPropagation();editModuleDesc(${m.id})" style="padding:3px 10px;font-size:11px;border:1px solid #ddd;background:#fff;border-radius:4px;cursor:pointer;">✏️ 编辑</button>
+        <button class="delete-btn" onclick="event.stopPropagation();deleteModule(${m.id})">🗑 删除</button>
+      </div>
+    </div>`;
+  }).join('');
+  updateAnnotations();
+}
+function abs0(v){return v===null?0:Math.abs(v)}
+function maxOff(m){return Math.max(abs0(m.dx_dp),abs0(m.dy_dp),abs0(m.dw_dp),abs0(m.dh_dp))}
+
+function toggleAnnotationMode(){
+  annotationMode=!annotationMode;drawStart=null;
+  const btn=document.getElementById('addAnnotationBtn');
+  btn.style.background=annotationMode?'#2196F3':'#fff';
+  btn.style.color=annotationMode?'#fff':'#2196F3';
+  btn.textContent=annotationMode?'取消标注':'✏️ 添加标注';
+  document.getElementById('canvasHint').textContent=annotationMode?'点击拖拽绘制标注区域':'滚轮缩放 · 拖拽平移';
+}
+
+function editModuleDesc(id){
+  const mod=analysisData.modules.find(m=>m.id===id);if(!mod)return;
+  const descEl=document.getElementById('desc-'+id);
+  const oldDesc=mod.description;
+  const newDesc=prompt('编辑标注内容：',oldDesc);
+  if(newDesc!==null&&newDesc.trim()!==oldDesc){
+    mod.description=newDesc.trim();
+    if(mod.diffs&&mod.diffs.length){
+      mod.diffs[0].description=newDesc.trim();
+    }
+    renderModuleList();
+  }
+}
+
+function updateAnnotations(){
+  if(!analysisData)return;
+  const cm={critical:'#f44336',major:'#ff9800',minor:'#ffc107',ok:'#4CAF50'};
+  viewer.annotations=analysisData.modules.map((m,i)=>({
+    id:m.id,bbox:m.bbox,label:String(m.id),desc:m.description,severity:m.severity,color:cm[m.severity]||'#f44336'
+  }));
+  viewer.draw();
+}
+
+function switchTab(tab){
+  currentTab=tab;
+  document.querySelectorAll('.tab-bar .tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
+  if(tab==='overlay'){
+    // 生成重合对比图
+    if(images['design']&&images['screenshot']){
+      const c=document.createElement('canvas');
+      c.width=images['design'].width;c.height=images['design'].height;
+      const ctx=c.getContext('2d');
+      // 设计稿半透明底
+      ctx.globalAlpha=0.5;
+      ctx.drawImage(images['design'],0,0);
+      // 实现截图混合
+      ctx.globalAlpha=0.5;
+      ctx.drawImage(images['screenshot'],0,0);
+      ctx.globalAlpha=1;
+      const overlayImg=new Image();
+      overlayImg.onload=()=>{viewer.setImage(overlayImg)};
+      overlayImg.src=c.toDataURL();
+    }
+    viewer.annotations=[];viewer.draw();
+    return;
+  }
+  let key=tab==='annotated'?'design':tab;
+  if(images[key])viewer.setImage(images[key]);
+  if(tab==='annotated'||tab==='design')updateAnnotations();
+  else{viewer.annotations=[];viewer.draw()}
+}
+
+function selectModule(id){
+  viewer.selectedAnnotation=id;
+  document.querySelectorAll('.module-card').forEach(c=>c.classList.toggle('selected',parseInt(c.dataset.id)===id));
+  viewer.draw();
+  const card=document.querySelector(`.module-card[data-id="${id}"]`);
+  if(card)card.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function locateModule(id){
+  const mod=analysisData.modules.find(m=>m.id===id);if(!mod)return;
+  if(currentTab!=='annotated')switchTab('annotated');
+  selectModule(id);viewer.zoomTo(mod.bbox);
+}
+
+function deleteModule(id){
+  analysisData.modules=analysisData.modules.filter(m=>m.id!==id);
+  if(viewer.selectedAnnotation===id)viewer.selectedAnnotation=null;
+  renderModuleList();
+}
+
+function resetAll(){
+  designFile=null;screenshotFile=null;analysisData=null;currentTab='annotated';
+  Object.keys(images).forEach(k=>delete images[k]);
+  viewer.img=null;viewer.annotations=[];viewer.selectedAnnotation=null;
+  viewer.ctx.clearRect(0,0,viewer.canvas.width,viewer.canvas.height);
+  document.getElementById('resultsSection').classList.remove('active');
+  document.getElementById('uploadSection').style.display='';
+  document.getElementById('analyzeBtn').disabled=true;
+  document.getElementById('analyzeBtn').textContent='开始分析';
+  document.getElementById('topOffsets').style.display='none';
+  ['dropDesign','dropScreenshot'].forEach(id=>{
+    const z=document.getElementById(id);
+    z.querySelector('.preview').style.display='none';
+    z.querySelector('.icon').style.display='';
+    z.querySelector('.label').style.display='';
+    z.querySelector('.sublabel').style.display='';
+  });
+  document.getElementById('fileDesign').value='';
+  document.getElementById('fileScreenshot').value='';
+}
+
+async function exportReport(){
+  if(!analysisData||!analysisData.annotated_image)return;
+  const resp=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({annotated_image:analysisData.annotated_image})});
+  if(!resp.ok)return;
+  const blob=await resp.blob();const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='design-check-report.png';a.click();
+  URL.revokeObjectURL(url);
+}
+
+window.addEventListener('resize',()=>{if(viewer.img)viewer.fitToContainer()});
+</script>
+</body>
+</html>
