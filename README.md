@@ -1,2 +1,29 @@
-# Design-check-tool
-一款设计验收走查工具，可以用于视觉层面比对设计稿和研发实现效果，基于OpenCV与sciKit，输出验收报告以供研发修改
+# 设计走查工具 Design Check
+
+上传设计稿和实现截图，自动检测 UI 元素的位置偏移、尺寸差异、颜色偏差、圆角差异。
+
+## 快速启动
+
+**Mac 用户：** 双击 `启动.command` 即可
+
+**手动启动：**
+```bash
+pip3 install flask opencv-python-headless numpy Pillow scikit-image
+python3 app.py
+# 浏览器打开 http://localhost:5002
+```
+
+## 功能
+
+- 📍 位置偏移检测 (dp)
+- 📐 尺寸差异检测
+- 🎨 颜色偏差检测
+- ⬜ 圆角差异检测
+- 🔄 重合对比视图
+- ✏️ 手动添加/编辑标注
+- 📥 导出标注报告
+
+## 系统要求
+
+- macOS / Linux / Windows
+- Python 3.8+
