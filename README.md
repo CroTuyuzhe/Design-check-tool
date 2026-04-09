@@ -27,3 +27,8 @@ python3 app.py
 
 - macOS / Linux / Windows
 - Python 3.8+
+
+## 必要依赖
+
+- 通过pip3获取开发者工具
+- Python 或者 Pyinstaller
